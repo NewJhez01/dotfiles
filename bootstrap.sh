@@ -4,7 +4,7 @@ set -euo pipefail
 # =========================
 # CONFIG (EDIT THIS)
 # =========================
-NVIM_CONFIG_REPO="git@github.com:YOURUSER/YOUR_NVIM_REPO.git"
+NVIM_CONFIG_REPO="git@git@github.com:NewJhez01/nvim.git"
 NVIM_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
 
 # =========================
@@ -294,6 +294,7 @@ alias glat='git fetch && git pull'
 # eza aliases (only if installed)
 if command -v eza >/dev/null 2>&1; then
   # Safe: keep ls as-is if you prefer; change to `alias ls='eza'` if you want full replacement.
+  alias ls='eza'
   alias l='eza -lah --git'
   alias ll='eza -lah --git'
   alias la='eza -a'
