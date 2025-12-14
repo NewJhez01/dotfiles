@@ -186,7 +186,7 @@ ensure_zshrc_config() {
       printf '\n# Homebrew\neval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"\n' >>"$zshrc"
   fi
 
-  # zinit + starship + direnv
+  # zinit + starship + direnv + vim bindings in terminal
   if ! grep -Fq "zinit.git/zinit.zsh" "$zshrc"; then
     cat >>"$zshrc" <<'EOF'
 
@@ -214,6 +214,13 @@ fi
 if command -v direnv >/dev/null 2>&1; then
   eval "$(direnv hook zsh)"
 fi
+# -------------------------
+# vim bindings
+# -------------------------
+KEYTIMEOUT=1
+bindkey -v
+setopt VIBACKSPACE  
+
 EOF
     info "Added zinit/starship/direnv config to ~/.zshrc"
   else
