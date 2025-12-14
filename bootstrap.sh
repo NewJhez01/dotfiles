@@ -333,6 +333,48 @@ clone_nvim_config() {
 }
 
 # =========================
+# TMUX CONF FIILE
+# =========================
+ensure_tmux_conf() {
+  info "Creating/updating tmux config..."
+  local file="$HOME/.tmux.conf"
+  touch "$file"
+
+  local begin="# >>> bootstrap: tmux >>>"
+  local end="# <<< bootstrap: tmux <<<"
+
+  if grep -Fq "$begin" "$file"; then
+    info "tmux block already present in $file; leaving as-is."
+    return
+  fi
+
+  cat >>"$file" <<'EOF'
+
+# >>> bootstrap: tmux >>>
+# More ergonomic prefix
+unbind C-b
+set -g prefix C-a
+bind C-a send-prefix
+
+# Start windows/panes at 1 (nice with keyboards)
+set -g base-index 1
+setw -g pane-base-index 1
+
+# Vim-style pane navigation
+bind h select-pane -L
+bind j select-pane -D
+bind k select-pane -U
+bind l select-pane -R
+
+# Quick reload
+bind r source-file ~/.tmux.conf \; display-message "tmux.conf reloaded"
+# <<< bootstrap: tmux <<<
+EOF
+
+  info "Wrote tmux config block to $file"
+}
+
+# =========================
 # MAIN
 # =========================
 main() {
@@ -359,6 +401,7 @@ main() {
   install_zinit
   ensure_zshrc_config
   ensure_aliases_file
+  ensure_tmux_conf
 
   clone_nvim_config
 
