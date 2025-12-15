@@ -190,6 +190,17 @@ ensure_zshrc_config() {
   if ! grep -Fq "zinit.git/zinit.zsh" "$zshrc"; then
     cat >>"$zshrc" <<'EOF'
 
+
+# -------------------------
+# completion (must be before fzf-tab)
+# -------------------------
+autoload -Uz compinit
+# use a writable cache file to avoid permission issues
+mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
+compinit -d "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompdump-$ZSH_VERSION"
+
+zmodload zsh/complist
+
 # -------------------------
 # zinit (plugin manager)
 # -------------------------
@@ -219,7 +230,10 @@ fi
 # -------------------------
 KEYTIMEOUT=1
 bindkey -v
-setopt VIBACKSPACE  
+bindkey -M viins '^?' backward-delete-char
+bindkey -M viins '^H' backward-delete-char
+bindkey -M vicmd '^?' backward-delete-char
+bindkey -M vicmd '^H' backward-delete-char
 
 EOF
     info "Added zinit/starship/direnv config to ~/.zshrc"
@@ -360,8 +374,9 @@ ensure_tmux_conf() {
 # >>> bootstrap: tmux >>>
 # More ergonomic prefix
 unbind C-b
-set -g prefix C-a
-bind C-a send-prefix
+set -g prefix C-Space
+bind C-Space send-prefix
+bind C-@ send-prefix
 
 # Start windows/panes at 1 (nice with keyboards)
 set -g base-index 1
