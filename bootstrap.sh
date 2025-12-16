@@ -4,7 +4,7 @@ set -euo pipefail
 # =========================
 # CONFIG (EDIT THIS)
 # =========================
-NVIM_CONFIG_REPO="git@git@github.com:NewJhez01/nvim.git"
+NVIM_CONFIG_REPO="git@github.com:NewJhez01/nvim.git"
 NVIM_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
 
 # =========================
@@ -130,7 +130,8 @@ brew_install_tools() {
     git-delta \
     lazygit \
     eza \
-    node
+    node \
+    zoxide
 
   if [[ -f "$(brew --prefix)/opt/fzf/install" ]]; then
     "$(brew --prefix)/opt/fzf/install" --key-bindings --completion --no-update-rc || true
@@ -186,7 +187,7 @@ ensure_zshrc_config() {
       printf '\n# Homebrew\neval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"\n' >>"$zshrc"
   fi
 
-  # zinit + starship + direnv + vim bindings in terminal
+  # zinit + starship + direnv + zoxide + vim bindings in terminal
   if ! grep -Fq "zinit.git/zinit.zsh" "$zshrc"; then
     cat >>"$zshrc" <<'EOF'
 
@@ -225,6 +226,14 @@ fi
 if command -v direnv >/dev/null 2>&1; then
   eval "$(direnv hook zsh)"
 fi
+
+# -------------------------
+# zoxide (smart cd)
+# -------------------------
+if command -v zoxide >/dev/null 2>&1; then
+  eval "$(zoxide init zsh)"
+fi
+
 # -------------------------
 # vim bindings
 # -------------------------
@@ -236,7 +245,7 @@ bindkey -M vicmd '^?' backward-delete-char
 bindkey -M vicmd '^H' backward-delete-char
 
 EOF
-    info "Added zinit/starship/direnv config to ~/.zshrc"
+    info "Added zinit/starship/direnv/zoxide config to ~/.zshrc"
   else
     info "~/.zshrc already contains zinit config; leaving as-is."
   fi
@@ -314,7 +323,6 @@ alias glat='git fetch && git pull'
 
 # eza aliases (only if installed)
 if command -v eza >/dev/null 2>&1; then
-  # Safe: keep ls as-is if you prefer; change to `alias ls='eza'` if you want full replacement.
   alias ls='eza'
   alias l='eza -lah --git'
   alias ll='eza -lah --git'
@@ -354,31 +362,24 @@ clone_nvim_config() {
 }
 
 # =========================
-# TMUX CONF FIILE
+# TMUX CONF FILE (OVERWRITE)
 # =========================
 ensure_tmux_conf() {
-  info "Creating/updating tmux config..."
+  info "Writing tmux config (overwriting ~/.tmux.conf)..."
   local file="$HOME/.tmux.conf"
-  touch "$file"
 
-  local begin="# >>> bootstrap: tmux >>>"
-  local end="# <<< bootstrap: tmux <<<"
+  cat >"$file" <<'EOF'
+# -------------------------
+# Tmux config
+# -------------------------
 
-  if grep -Fq "$begin" "$file"; then
-    info "tmux block already present in $file; leaving as-is."
-    return
-  fi
-
-  cat >>"$file" <<'EOF'
-
-# >>> bootstrap: tmux >>>
-# More ergonomic prefix
+# Prefix
 unbind C-b
 set -g prefix C-Space
 bind C-Space send-prefix
 bind C-@ send-prefix
 
-# Start windows/panes at 1 (nice with keyboards)
+# Indexing
 set -g base-index 1
 setw -g pane-base-index 1
 
@@ -388,12 +389,22 @@ bind j select-pane -D
 bind k select-pane -U
 bind l select-pane -R
 
+# Copy mode = scrolling (Vim)
+setw -g mode-keys vi
+set -g history-limit 100000
+set -g mouse on
+
+# Enter copy mode with prefix + [
+bind [ copy-mode -e
+
+# Make Enter copy selection and exit copy-mode (optional)
+bind -T copy-mode-vi Enter send -X copy-pipe-and-cancel
+
 # Quick reload
 bind r source-file ~/.tmux.conf \; display-message "tmux.conf reloaded"
-# <<< bootstrap: tmux <<<
 EOF
 
-  info "Wrote tmux config block to $file"
+  info "Wrote $file"
 }
 
 # =========================
@@ -427,9 +438,16 @@ main() {
 
   clone_nvim_config
 
-  # Set git editor once per machine (idempotent)
+  # Git editor + delta defaults (idempotent)
   if have git && have nvim; then
     git config --global core.editor "nvim" || true
+  fi
+
+  if have git; then
+    git config --global core.pager delta || true
+    git config --global delta.navigate true || true
+    git config --global delta.side-by-side false || true
+    git config --global interactive.diffFilter "delta --color-only" || true
   fi
 
   if is_wsl; then
@@ -439,7 +457,8 @@ main() {
 
   info "Done."
   info "Open a NEW terminal window (so zsh + brew env load), then run: nvim"
-  info "Test aliases: gst, gaa, glog, ll, lt"
+  info "Test zoxide: z <foldername>"
+  info "Test tmux copy-mode scroll: Ctrl-Space [ then k/j, /search, q"
 }
 
 main "$@"
