@@ -397,8 +397,37 @@ set -g mouse on
 # Enter copy mode with prefix + [
 bind [ copy-mode -e
 
-# Make Enter copy selection and exit copy-mode (optional)
-bind -T copy-mode-vi Enter send -X copy-pipe-and-cancel
+# -------------------------
+# Copy to system clipboard (macOS / Linux / WSL)
+# -------------------------
+# Choose the best available clipboard command:
+# - WSL: clip.exe (Windows clipboard)
+# - macOS: pbcopy
+# - Wayland: wl-copy
+# - X11: xclip / xsel
+set -g @clipboard_copy_cmd 'cat >/dev/null'
+
+# Prefer Windows clipboard when inside WSL (if available)
+if-shell 'command -v clip.exe >/dev/null 2>&1 && grep -qiE "(microsoft|wsl)" /proc/version 2>/dev/null' \
+  'set -g @clipboard_copy_cmd "clip.exe"'
+
+# macOS
+if-shell 'command -v pbcopy >/dev/null 2>&1' \
+  'set -g @clipboard_copy_cmd "pbcopy"'
+
+# Wayland
+if-shell 'command -v wl-copy >/dev/null 2>&1' \
+  'set -g @clipboard_copy_cmd "wl-copy"'
+
+# X11
+if-shell 'command -v xclip >/dev/null 2>&1' \
+  'set -g @clipboard_copy_cmd "xclip -in -selection clipboard"'
+if-shell 'command -v xsel >/dev/null 2>&1' \
+  'set -g @clipboard_copy_cmd "xsel -ib"'
+
+# Copy selection (Enter or y) -> system clipboard, then exit copy-mode
+bind -T copy-mode-vi Enter send -X copy-pipe-and-cancel "#{@clipboard_copy_cmd}"
+bind -T copy-mode-vi y     send -X copy-pipe-and-cancel "#{@clipboard_copy_cmd}"
 
 # Quick reload
 bind r source-file ~/.tmux.conf \; display-message "tmux.conf reloaded"
@@ -459,6 +488,7 @@ main() {
   info "Open a NEW terminal window (so zsh + brew env load), then run: nvim"
   info "Test zoxide: z <foldername>"
   info "Test tmux copy-mode scroll: Ctrl-Space [ then k/j, /search, q"
+  info "Test tmux copy -> clipboard: Ctrl-Space [ select text, then Enter (or y), then paste in OS app"
 }
 
 main "$@"
