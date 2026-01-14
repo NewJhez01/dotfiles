@@ -1,62 +1,61 @@
+
 #!/usr/bin/env bash
 set -euo pipefail
+
+# ==========================================
+# Owen Bootstrap (Arch/Omarchy + Ubuntu/WSL + macOS)
+# - Uses: pacman on Arch, apt on Ubuntu, brew on macOS
+# - Intentionally overwrites: ~/.zshrc, ~/.tmux.conf (with backups)
+# - Clones/updates Neovim config
+# ==========================================
 
 # =========================
 # CONFIG (EDIT THIS)
 # =========================
 NVIM_CONFIG_REPO="git@github.com:NewJhez01/nvim.git"
 NVIM_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
+INSTALL_NODE="${INSTALL_NODE:-1}"          # 1=install node, 0=skip
+SET_DEFAULT_SHELL_ZSH="${SET_DEFAULT_SHELL_ZSH:-1}"  # 1=chsh to zsh, 0=skip
+OVERWRITE_ZSHRC="${OVERWRITE_ZSHRC:-1}"    # 1=overwrite ~/.zshrc (backup first)
+OVERWRITE_TMUX="${OVERWRITE_TMUX:-1}"      # 1=overwrite ~/.tmux.conf (backup first)
 
 # =========================
 # HELPERS
 # =========================
 info() { printf "\033[1;34m[i]\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33m[!]\033[0m %s\n" "$*"; }
-err() { printf "\033[1;31m[x]\033[0m %s\n" "$*"; }
+err()  { printf "\033[1;31m[x]\033[0m %s\n" "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 is_macos() { [[ "$(uname -s)" == "Darwin" ]]; }
 is_linux() { [[ "$(uname -s)" == "Linux" ]]; }
-is_wsl() { is_linux && grep -qiE "(microsoft|wsl)" /proc/version 2>/dev/null; }
+is_wsl()   { is_linux && grep -qiE "(microsoft|wsl)" /proc/version 2>/dev/null; }
+
+backup_once() {
+  local path="$1"
+  if [[ -e "$path" && ! -e "${path}.bootstrap.bak" ]]; then
+    cp -a "$path" "${path}.bootstrap.bak"
+    info "Backed up $path -> ${path}.bootstrap.bak"
+  fi
+}
 
 require_repo_config() {
   if [[ "$NVIM_CONFIG_REPO" == *"YOURUSER"* ]] || [[ "$NVIM_CONFIG_REPO" == *"YOUR_NVIM_REPO"* ]]; then
     err "You must set NVIM_CONFIG_REPO at the top of this script."
-    err "Edit bootstrap.sh and set NVIM_CONFIG_REPO to your repo URL, then re-run."
     exit 1
   fi
 }
 
-# =========================
-# OS PREP
-# =========================
-install_prereqs_ubuntu() {
-  info "Installing Ubuntu prerequisites (apt)..."
-  sudo apt update
-  sudo apt install -y \
-    build-essential \
-    curl \
-    git \
-    ca-certificates \
-    gnupg \
-    lsb-release \
-    unzip \
-    zip \
-    pkg-config
-}
-
-install_xcode_cli_tools_macos() {
-  if xcode-select -p >/dev/null 2>&1; then
-    info "Xcode Command Line Tools already installed."
-  else
-    info "Installing Xcode Command Line Tools..."
-    xcode-select --install || true
-    warn "If a GUI prompt appeared, complete it, then re-run this script if needed."
-  fi
+detect_pm() {
+  if is_macos; then echo "brew"; return; fi
+  if have pacman; then echo "pacman"; return; fi
+  if have apt; then echo "apt"; return; fi
+  err "No supported package manager found. Need pacman (Arch), apt (Ubuntu), or brew (macOS)."
+  exit 1
 }
 
 # =========================
-# HOMEBREW
+# PACKAGE INSTALLS
 # =========================
 install_homebrew() {
   if have brew; then
@@ -68,200 +67,153 @@ install_homebrew() {
   NONINTERACTIVE=1 /bin/bash -c \
     "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-  if is_macos; then
-    if [[ -x /opt/homebrew/bin/brew ]]; then
-      eval "$(/opt/homebrew/bin/brew shellenv)"
-    else
-      eval "$(/usr/local/bin/brew shellenv)"
-    fi
-  else
-    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" || true
+  if [[ -x /opt/homebrew/bin/brew ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [[ -x /usr/local/bin/brew ]]; then
+    eval "$(/usr/local/bin/brew shellenv)"
   fi
 
   if ! have brew; then
-    err "Homebrew install completed but 'brew' not found on PATH."
-    err "Open a new shell, or add brew shellenv to your profile, then re-run."
+    err "Homebrew installed but 'brew' not found on PATH."
+    err "Open a new shell, or add brew shellenv to your profile."
     exit 1
   fi
 }
 
-ensure_brew_shellenv_persisted() {
-  info "Persisting brew shellenv in your shell profile (idempotent)..."
-  local line=""
-  if is_macos; then
-    if [[ -x /opt/homebrew/bin/brew ]]; then
-      line='eval "$(/opt/homebrew/bin/brew shellenv)"'
-    else
-      line='eval "$(/usr/local/bin/brew shellenv)"'
-    fi
-  else
-    line='eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"'
-  fi
-
-  for f in "$HOME/.zprofile" "$HOME/.profile"; do
-    touch "$f"
-    if ! grep -Fq "$line" "$f"; then
-      printf "\n# Homebrew\n%s\n" "$line" >>"$f"
-      info "Added brew shellenv to $f"
-    fi
-  done
-}
-
-# =========================
-# PACKAGES
-# =========================
-brew_install_tools() {
-  info "Installing tools via Homebrew..."
+install_tools_brew() {
+  info "Installing tools via brew..."
   brew update
-
-  brew install \
-    neovim \
-    git \
-    tmux \
-    starship \
-    ripgrep \
-    fd \
-    fzf \
-    bat \
-    jq \
-    tree \
-    htop \
-    direnv \
-    git-delta \
-    lazygit \
-    eza \
-    node \
-    zoxide
+  local pkgs=(
+    neovim git tmux starship ripgrep fd fzf bat jq tree htop direnv git-delta lazygit eza zoxide
+  )
+  if [[ "$INSTALL_NODE" == "1" ]]; then
+    pkgs+=(node)
+  fi
+  pkgs+=(zsh)
+  brew install "${pkgs[@]}"
 
   if [[ -f "$(brew --prefix)/opt/fzf/install" ]]; then
     "$(brew --prefix)/opt/fzf/install" --key-bindings --completion --no-update-rc || true
   fi
 }
 
-# =========================
-# ZSH + ZINIT + STARSHIP
-# =========================
-setup_zsh_default_shell() {
-  if ! have zsh; then
-    info "Installing zsh..."
-    if is_macos; then
-      brew install zsh
-    else
-      sudo apt install -y zsh || brew install zsh
-    fi
+install_tools_pacman() {
+  info "Installing tools via pacman (Arch/Omarchy)..."
+  sudo pacman -Syu --needed --noconfirm
+
+  local pkgs=(
+    neovim git tmux starship ripgrep fd fzf bat jq tree htop direnv git-delta lazygit eza zoxide
+    unzip zip pkgconf base-devel
+    zsh
+  )
+  if [[ "$INSTALL_NODE" == "1" ]]; then
+    pkgs+=(nodejs npm)
   fi
 
-  if [[ "${SHELL:-}" != "$(command -v zsh)" ]]; then
-    info "Setting zsh as default shell (may prompt for password)..."
-    chsh -s "$(command -v zsh)" || warn "Could not change default shell (this can be restricted)."
-  fi
+  # Some Arch repos may not have every package depending on mirrors/enablement.
+  # pacman will error if a package is missing; we install in one go for speed.
+  sudo pacman -S --needed --noconfirm "${pkgs[@]}"
 }
 
-install_zinit() {
-  local zinit_dir="${ZINIT_HOME:-$HOME/.local/share/zinit/zinit.git}"
-  if [[ -d "$zinit_dir/.git" ]]; then
-    info "zinit already installed."
-    return
-  fi
-  info "Installing zinit..."
-  mkdir -p "$(dirname "$zinit_dir")"
-  git clone https://github.com/zdharma-continuum/zinit.git "$zinit_dir"
+install_tools_apt() {
+  info "Installing tools via apt (Ubuntu/WSL)..."
+  sudo apt update
+  sudo apt install -y \
+    build-essential curl git ca-certificates gnupg lsb-release unzip zip pkg-config \
+    tmux ripgrep jq tree htop direnv zsh
+
+  # Ubuntu naming differences
+  sudo apt install -y neovim fzf bat fd-find || true
+
+  # Nice-to-haves may require extra repos on Ubuntu; skip silently if missing.
+  sudo apt install -y zoxide || true
 }
 
-ensure_zshrc_config() {
-  info "Configuring ~/.zshrc (idempotent)..."
+# =========================
+# ZSH CONFIG (INTENTIONAL OVERWRITE)
+# =========================
+write_zshrc() {
   local zshrc="$HOME/.zshrc"
-  touch "$zshrc"
 
-  # Brew shellenv in zshrc as well (non-login shells)
-  if is_macos; then
-    if [[ -x /opt/homebrew/bin/brew ]]; then
-      grep -Fq 'eval "$(/opt/homebrew/bin/brew shellenv)"' "$zshrc" ||
-        printf '\n# Homebrew\neval "$(/opt/homebrew/bin/brew shellenv)"\n' >>"$zshrc"
-    else
-      grep -Fq 'eval "$(/usr/local/bin/brew shellenv)"' "$zshrc" ||
-        printf '\n# Homebrew\neval "$(/usr/local/bin/brew shellenv)"\n' >>"$zshrc"
-    fi
-  else
-    grep -Fq 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' "$zshrc" ||
-      printf '\n# Homebrew\neval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"\n' >>"$zshrc"
-  fi
+  if [[ "$OVERWRITE_ZSHRC" == "1" ]]; then
+    backup_once "$zshrc"
+    info "Writing ~/.zshrc (overwriting)..."
+    cat >"$zshrc" <<'EOF'
+# ==========================================
+# Owen ~/.zshrc (bootstrap-managed)
+# ==========================================
 
-  # zinit + starship + direnv + zoxide + vim bindings in terminal
-  if ! grep -Fq "zinit.git/zinit.zsh" "$zshrc"; then
-    cat >>"$zshrc" <<'EOF'
+# Faster key response for vi-mode
+KEYTIMEOUT=1
 
+# Basic sanity
+export EDITOR="nvim"
+export VISUAL="nvim"
 
-# -------------------------
-# completion (must be before fzf-tab)
-# -------------------------
+# Completion
 autoload -Uz compinit
-# use a writable cache file to avoid permission issues
 mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
 compinit -d "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompdump-$ZSH_VERSION"
 
 zmodload zsh/complist
 
-# -------------------------
-# zinit (plugin manager)
-# -------------------------
-ZINIT_HOME="${ZINIT_HOME:-$HOME/.local/share/zinit/zinit.git}"
-if [[ -f "$ZINIT_HOME/zinit.zsh" ]]; then
-  source "$ZINIT_HOME/zinit.zsh"
-  zinit light zsh-users/zsh-autosuggestions
-  zinit light zsh-users/zsh-syntax-highlighting
-  zinit light Aloxaf/fzf-tab
-fi
-
-# -------------------------
-# Starship prompt
-# -------------------------
-if command -v starship >/dev/null 2>&1; then
-  eval "$(starship init zsh)"
-fi
-
-# -------------------------
-# direnv (per-project env)
-# -------------------------
-if command -v direnv >/dev/null 2>&1; then
-  eval "$(direnv hook zsh)"
-fi
-
-# -------------------------
-# zoxide (smart cd)
-# -------------------------
-if command -v zoxide >/dev/null 2>&1; then
-  eval "$(zoxide init zsh)"
-fi
-
-# -------------------------
-# vim bindings
-# -------------------------
-KEYTIMEOUT=1
+# Vim keybindings
 bindkey -v
 bindkey -M viins '^?' backward-delete-char
 bindkey -M viins '^H' backward-delete-char
 bindkey -M vicmd '^?' backward-delete-char
 bindkey -M vicmd '^H' backward-delete-char
 
-EOF
-    info "Added zinit/starship/direnv/zoxide config to ~/.zshrc"
-  else
-    info "~/.zshrc already contains zinit config; leaving as-is."
-  fi
+# Starship prompt
+if command -v starship >/dev/null 2>&1; then
+  eval "$(starship init zsh)"
+fi
 
-  # Ensure aliases file is sourced
-  if ! grep -Fq ".config/zsh/aliases.zsh" "$zshrc"; then
-    cat >>"$zshrc" <<'EOF'
+# direnv
+if command -v direnv >/dev/null 2>&1; then
+  eval "$(direnv hook zsh)"
+fi
 
-# -------------------------
-# Custom aliases
-# -------------------------
+# zoxide
+if command -v zoxide >/dev/null 2>&1; then
+  eval "$(zoxide init zsh)"
+fi
+
+# fzf keybindings/completions (works for brew + pacman + apt if fzf installed)
+if command -v fzf >/dev/null 2>&1; then
+  # Common locations; ignore if missing
+  [[ -f ~/.fzf.zsh ]] && source ~/.fzf.zsh
+  [[ -f /usr/share/fzf/key-bindings.zsh ]] && source /usr/share/fzf/key-bindings.zsh
+  [[ -f /usr/share/fzf/completion.zsh ]] && source /usr/share/fzf/completion.zsh
+fi
+
+# Custom aliases (created by bootstrap)
 if [[ -f "$HOME/.config/zsh/aliases.zsh" ]]; then
   source "$HOME/.config/zsh/aliases.zsh"
 fi
 EOF
-    info "Added aliases sourcing to ~/.zshrc"
+  else
+    info "Skipping ~/.zshrc overwrite (OVERWRITE_ZSHRC=0)."
+  fi
+}
+
+set_default_shell_zsh() {
+  if [[ "$SET_DEFAULT_SHELL_ZSH" != "1" ]]; then
+    info "Skipping default shell change (SET_DEFAULT_SHELL_ZSH=0)."
+    return
+  fi
+
+  if ! have zsh; then
+    warn "zsh not found; skipping chsh."
+    return
+  fi
+
+  # On WSL/corporate environments, chsh may be blocked; treat as best-effort.
+  if [[ "${SHELL:-}" != "$(command -v zsh)" ]]; then
+    info "Setting zsh as default shell (may prompt for password)..."
+    chsh -s "$(command -v zsh)" || warn "Could not change default shell (may be restricted)."
+  else
+    info "zsh already set as default shell."
   fi
 }
 
@@ -275,7 +227,6 @@ ensure_aliases_file() {
   mkdir -p "$dir"
   touch "$file"
 
-  # Write a marked block so re-runs don't duplicate
   local begin="# >>> bootstrap: git aliases >>>"
   local end="# <<< bootstrap: git aliases <<<"
 
@@ -309,7 +260,6 @@ alias gp='git push'
 alias gpf='git push --force'
 alias gco='git checkout'
 alias gcob='git checkout -b'
-alias gcoc='check=1 git checkout'
 alias gb='git branch'
 alias glog='git log --oneline --graph --decorate'
 alias gd='git diff'
@@ -333,6 +283,57 @@ fi
 EOF
 
   info "Wrote aliases block to $file"
+}
+
+# =========================
+# TMUX CONF (INTENTIONAL OVERWRITE)
+# =========================
+ensure_tmux_conf() {
+  local file="$HOME/.tmux.conf"
+
+  if [[ "$OVERWRITE_TMUX" != "1" ]]; then
+    info "Skipping tmux overwrite (OVERWRITE_TMUX=0)."
+    return
+  fi
+
+  backup_once "$file"
+  info "Writing tmux config to ~/.tmux.conf (overwriting)..."
+
+  cat >"$file" <<'EOF'
+# -------------------------
+# Tmux config (bootstrap-managed)
+# -------------------------
+
+# Prefix
+unbind C-b
+set -g prefix C-Space
+bind C-Space send-prefix
+bind C-@ send-prefix
+
+# Indexing
+set -g base-index 1
+setw -g pane-base-index 1
+
+# Vim-style pane navigation
+bind h select-pane -L
+bind j select-pane -D
+bind k select-pane -U
+bind l select-pane -R
+
+# Copy mode = scrolling (Vim)
+setw -g mode-keys vi
+set -g history-limit 100000
+set -g mouse on
+
+# Enter copy mode with prefix + [
+bind [ copy-mode -e
+
+# Make Enter copy selection and exit copy-mode
+bind -T copy-mode-vi Enter send -X copy-pipe-and-cancel
+
+# Quick reload
+bind r source-file ~/.tmux.conf \; display-message "tmux.conf reloaded"
+EOF
 }
 
 # =========================
@@ -362,103 +363,58 @@ clone_nvim_config() {
 }
 
 # =========================
-# TMUX CONF FILE (OVERWRITE)
+# GIT DEFAULTS
 # =========================
-ensure_tmux_conf() {
-  info "Writing tmux config (overwriting ~/.tmux.conf)..."
-  local file="$HOME/.tmux.conf"
-
-  cat >"$file" <<'EOF'
-# -------------------------
-# Tmux config
-# -------------------------
-
-# Prefix
-unbind C-b
-set -g prefix C-Space
-bind C-Space send-prefix
-bind C-@ send-prefix
-
-# Indexing
-set -g base-index 1
-setw -g pane-base-index 1
-
-# Vim-style pane navigation
-bind h select-pane -L
-bind j select-pane -D
-bind k select-pane -U
-bind l select-pane -R
-
-# Copy mode = scrolling (Vim)
-setw -g mode-keys vi
-set -g history-limit 100000
-set -g mouse on
-
-# Enter copy mode with prefix + [
-bind [ copy-mode -e
-
-# Make Enter copy selection and exit copy-mode (optional)
-bind -T copy-mode-vi Enter send -X copy-pipe-and-cancel
-
-# Quick reload
-bind r source-file ~/.tmux.conf \; display-message "tmux.conf reloaded"
-EOF
-
-  info "Wrote $file"
+configure_git_defaults() {
+  if have git; then
+    git config --global core.editor "nvim" || true
+    if have delta; then
+      git config --global core.pager delta || true
+      git config --global delta.navigate true || true
+      git config --global delta.side-by-side false || true
+      git config --global interactive.diffFilter "delta --color-only" || true
+    fi
+  fi
 }
 
 # =========================
 # MAIN
 # =========================
 main() {
-  if is_macos; then
-    info "Detected macOS."
-    install_xcode_cli_tools_macos
-  elif is_linux; then
-    info "Detected Linux."
-    if have apt; then
-      install_prereqs_ubuntu
-    else
-      warn "No apt detected. This script assumes Ubuntu/WSL for Linux."
-    fi
-  else
-    err "Unsupported OS: $(uname -s)"
-    exit 1
-  fi
+  local pm
+  pm="$(detect_pm)"
+  info "Detected package manager: $pm"
 
-  install_homebrew
-  ensure_brew_shellenv_persisted
-  brew_install_tools
+  case "$pm" in
+    brew)
+      install_homebrew
+      install_tools_brew
+      ;;
+    pacman)
+      install_tools_pacman
+      ;;
+    apt)
+      install_tools_apt
+      ;;
+  esac
 
-  setup_zsh_default_shell
-  install_zinit
-  ensure_zshrc_config
   ensure_aliases_file
+  write_zshrc
+  set_default_shell_zsh
   ensure_tmux_conf
-
   clone_nvim_config
-
-  # Git editor + delta defaults (idempotent)
-  if have git && have nvim; then
-    git config --global core.editor "nvim" || true
-  fi
-
-  if have git; then
-    git config --global core.pager delta || true
-    git config --global delta.navigate true || true
-    git config --global delta.side-by-side false || true
-    git config --global interactive.diffFilter "delta --color-only" || true
-  fi
+  configure_git_defaults
 
   if is_wsl; then
-    warn "WSL detected: keep your repos inside /home (NOT /mnt/c) for best performance."
-    warn "Consider Windows Defender exclusions for \\\\wsl$\\ to avoid slow file IO."
+    warn "WSL detected: keep repos in /home (NOT /mnt/c) for best performance."
+    warn "Consider Windows Defender exclusions for \\\\wsl$\\ to avoid slow IO."
   fi
 
   info "Done."
-  info "Open a NEW terminal window (so zsh + brew env load), then run: nvim"
+  info "Open a NEW terminal window (so zsh loads), then run: nvim"
   info "Test zoxide: z <foldername>"
   info "Test tmux copy-mode scroll: Ctrl-Space [ then k/j, /search, q"
 }
 
 main "$@"
+
