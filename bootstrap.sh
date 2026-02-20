@@ -177,17 +177,17 @@ install_nvim_dev_tools() {
 
   if have npm; then
     if [[ "$(npm config get prefix 2>/dev/null || true)" == "/usr" ]]; then
-      sudo npm install -g prettierd prettier eslint_d || true
+      sudo npm install -g @fsouza/prettierd prettier eslint_d || warn "npm global install failed (sudo)."
     else
-      npm install -g prettierd prettier eslint_d || true
+      npm install -g @fsouza/prettierd prettier eslint_d || sudo npm install -g @fsouza/prettierd prettier eslint_d || warn "npm global install failed."
     fi
   else
-    warn "npm not found; skipping prettierd/prettier/eslint_d install."
+    warn "npm not found; skipping @fsouza/prettierd/prettier/eslint_d install."
   fi
 
   if have go; then
-    go install golang.org/x/tools/cmd/goimports@latest || true
-    go install mvdan.cc/gofumpt@latest || true
+    go install golang.org/x/tools/cmd/goimports@latest || warn "go install failed: goimports"
+    go install mvdan.cc/gofumpt@latest || warn "go install failed: gofumpt"
   else
     warn "go not found; skipping goimports/gofumpt install."
   fi
@@ -362,57 +362,6 @@ EOF
 }
 
 # =========================
-# TMUX CONF (INTENTIONAL OVERWRITE)
-# =========================
-ensure_tmux_conf() {
-  local file="$HOME/.tmux.conf"
-
-  if [[ "$OVERWRITE_TMUX" != "1" ]]; then
-    info "Skipping tmux overwrite (OVERWRITE_TMUX=0)."
-    return
-  fi
-
-  backup_once "$file"
-  info "Writing tmux config to ~/.tmux.conf (overwriting)..."
-
-  cat >"$file" <<'EOF'
-# -------------------------
-# Tmux config (bootstrap-managed)
-# -------------------------
-
-# Prefix
-unbind C-b
-set -g prefix C-Space
-bind C-Space send-prefix
-bind C-@ send-prefix
-
-# Indexing
-set -g base-index 1
-setw -g pane-base-index 1
-
-# Vim-style pane navigation
-bind h select-pane -L
-bind j select-pane -D
-bind k select-pane -U
-bind l select-pane -R
-
-# Copy mode = scrolling (Vim)
-setw -g mode-keys vi
-set -g history-limit 100000
-set -g mouse on
-
-# Enter copy mode with prefix + [
-bind [ copy-mode -e
-
-# Make Enter copy selection and exit copy-mode
-bind -T copy-mode-vi Enter send -X copy-pipe-and-cancel
-
-# Quick reload
-bind r source-file ~/.tmux.conf \; display-message "tmux.conf reloaded"
-EOF
-}
-
-# =========================
 # NEOVIM CONFIG
 # =========================
 clone_nvim_config() {
@@ -441,9 +390,28 @@ clone_nvim_config() {
 # =========================
 # GIT DEFAULTS
 # =========================
+configure_git_defaults() {
+  if ! have git; then
+    warn "git not found; skipping git defaults."
+    return
+  fi
+
+  git config --global core.editor "nvim" || true
+  git config --global pull.rebase false || true
+  git config --global init.defaultBranch main || true
+  info "Configured basic global git defaults."
+}
+
 ensure_tmux_conf() {
-  info "Writing tmux config (overwriting ~/.tmux.conf)..."
   local file="$HOME/.tmux.conf"
+
+  if [[ "$OVERWRITE_TMUX" != "1" ]]; then
+    info "Skipping tmux overwrite (OVERWRITE_TMUX=0)."
+    return
+  fi
+
+  backup_once "$file"
+  info "Writing tmux config (overwriting ~/.tmux.conf)..."
 
   cat >"$file" <<'EOF'
 # -------------------------
