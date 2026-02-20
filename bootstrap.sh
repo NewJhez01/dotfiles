@@ -129,6 +129,76 @@ install_tools_apt() {
   sudo apt install -y zoxide || true
 }
 
+install_nvim_dev_tools() {
+  local pm="$1"
+  info "Installing Neovim formatter/linter toolchain..."
+
+  case "$pm" in
+    brew)
+      brew install \
+        stylua \
+        luacheck \
+        php-code-sniffer \
+        php-cs-fixer \
+        go \
+        rust || true
+      ;;
+    pacman)
+      local pac_pkgs=(
+        stylua
+        luacheck
+        lua-check
+        php
+        php-codesniffer
+        php-cs-fixer
+        go
+        rustup
+      )
+      for pkg in "${pac_pkgs[@]}"; do
+        if pacman -Si "$pkg" >/dev/null 2>&1; then
+          sudo pacman -S --needed --noconfirm "$pkg"
+        else
+          warn "Skipping unavailable pacman package: $pkg"
+        fi
+      done
+      if have rustup; then
+        rustup default stable >/dev/null 2>&1 || true
+        rustup component add rustfmt || true
+      fi
+      ;;
+    apt)
+      sudo apt install -y \
+        php php-cli composer \
+        golang rustc cargo \
+        stylua luacheck php-codesniffer php-cs-fixer rustfmt || true
+      sudo apt install -y lua-check || true
+      ;;
+  esac
+
+  if have npm; then
+    if [[ "$(npm config get prefix 2>/dev/null || true)" == "/usr" ]]; then
+      sudo npm install -g prettierd prettier eslint_d || true
+    else
+      npm install -g prettierd prettier eslint_d || true
+    fi
+  else
+    warn "npm not found; skipping prettierd/prettier/eslint_d install."
+  fi
+
+  if have go; then
+    go install golang.org/x/tools/cmd/goimports@latest || true
+    go install mvdan.cc/gofumpt@latest || true
+  else
+    warn "go not found; skipping goimports/gofumpt install."
+  fi
+
+  if have composer; then
+    composer global require --dev laravel/pint || true
+  else
+    warn "composer not found; skipping laravel/pint install."
+  fi
+}
+
 # =========================
 # ZSH CONFIG (INTENTIONAL OVERWRITE)
 # =========================
@@ -149,6 +219,12 @@ KEYTIMEOUT=1
 # Basic sanity
 export EDITOR="nvim"
 export VISUAL="nvim"
+
+# Ensure user-installed tooling is on PATH
+export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/go/bin:$PATH"
+export PATH="$HOME/.config/composer/vendor/bin:$PATH"
+export PATH="$HOME/.composer/vendor/bin:$PATH"
 
 # Completion
 autoload -Uz compinit
@@ -458,6 +534,8 @@ main() {
       ;;
   esac
 
+  install_nvim_dev_tools "$pm"
+
   ensure_aliases_file
   write_zshrc
   set_default_shell_zsh
@@ -478,4 +556,3 @@ main() {
 }
 
 main "$@"
-
