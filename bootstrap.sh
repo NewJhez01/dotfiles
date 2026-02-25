@@ -199,6 +199,25 @@ install_nvim_dev_tools() {
   fi
 }
 
+ensure_fzf_tab_plugin() {
+  local plugin_dir="$HOME/.config/zsh/plugins/fzf-tab"
+  info "Installing/updating fzf-tab plugin..."
+
+  mkdir -p "$(dirname "$plugin_dir")"
+  if [[ -d "$plugin_dir/.git" ]]; then
+    git -C "$plugin_dir" pull --ff-only || warn "Could not update fzf-tab; keeping existing version."
+    return
+  fi
+
+  if [[ -e "$plugin_dir" ]]; then
+    warn "$plugin_dir exists but is not a git repo; skipping fzf-tab clone."
+    return
+  fi
+
+  git clone --depth 1 https://github.com/Aloxaf/fzf-tab "$plugin_dir" \
+    || warn "Could not clone fzf-tab; Tab will use default zsh completion."
+}
+
 # =========================
 # ZSH CONFIG (INTENTIONAL OVERWRITE)
 # =========================
@@ -232,6 +251,12 @@ mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
 compinit -d "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompdump-$ZSH_VERSION"
 
 zmodload zsh/complist
+
+# fzf-tab (fzf UI for normal completion, e.g. cd <Tab>)
+if [[ -f "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.plugin.zsh" ]]; then
+  source "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.plugin.zsh"
+  zstyle ':fzf-tab:*' use-fzf-default-opts yes
+fi
 
 # Vim keybindings
 bindkey -v
@@ -503,6 +528,7 @@ main() {
   esac
 
   install_nvim_dev_tools "$pm"
+  ensure_fzf_tab_plugin
 
   ensure_aliases_file
   write_zshrc
@@ -518,6 +544,7 @@ main() {
 
   info "Done."
   info "Open a NEW terminal window (so zsh loads), then run: nvim"
+  info "Test fzf-tab: type 'cd ' then press Tab"
   info "Test zoxide: z <foldername>"
   info "Test tmux copy-mode scroll: Ctrl-Space [ then k/j, /search, q"
   info "Test tmux copy -> clipboard: Ctrl-Space [ select text, then Enter (or y), then paste in OS app"
