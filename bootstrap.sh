@@ -218,6 +218,25 @@ ensure_fzf_tab_plugin() {
     || warn "Could not clone fzf-tab; Tab will use default zsh completion."
 }
 
+ensure_zsh_autosuggestions_plugin() {
+  local plugin_dir="$HOME/.config/zsh/plugins/zsh-autosuggestions"
+  info "Installing/updating zsh-autosuggestions plugin..."
+
+  mkdir -p "$(dirname "$plugin_dir")"
+  if [[ -d "$plugin_dir/.git" ]]; then
+    git -C "$plugin_dir" pull --ff-only || warn "Could not update zsh-autosuggestions; keeping existing version."
+    return
+  fi
+
+  if [[ -e "$plugin_dir" ]]; then
+    warn "$plugin_dir exists but is not a git repo; skipping zsh-autosuggestions clone."
+    return
+  fi
+
+  git clone --depth 1 https://github.com/zsh-users/zsh-autosuggestions "$plugin_dir" \
+    || warn "Could not clone zsh-autosuggestions."
+}
+
 # =========================
 # ZSH CONFIG (INTENTIONAL OVERWRITE)
 # =========================
@@ -251,6 +270,13 @@ mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
 compinit -d "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompdump-$ZSH_VERSION"
 
 zmodload zsh/complist
+
+# zsh-autosuggestions (ghost text inline suggestions)
+if [[ -f "$HOME/.config/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then
+  source "$HOME/.config/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+  ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=8'
+  bindkey -M viins '^[[C' autosuggest-accept
+fi
 
 # fzf-tab (fzf UI for normal completion, e.g. cd <Tab>)
 if [[ -f "$HOME/.config/zsh/plugins/fzf-tab/fzf-tab.plugin.zsh" ]]; then
@@ -529,6 +555,7 @@ main() {
 
   install_nvim_dev_tools "$pm"
   ensure_fzf_tab_plugin
+  ensure_zsh_autosuggestions_plugin
 
   ensure_aliases_file
   write_zshrc
