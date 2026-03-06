@@ -48,61 +48,33 @@ check_optional_cmd() {
   fi
 }
 
-check_one_required() {
-  local label="$1"
-  shift
-  local found=""
-  local cmd
-  for cmd in "$@"; do
-    if have "$cmd"; then
-      found="$cmd"
-      break
-    fi
-  done
-
-  if [[ -n "$found" ]]; then
-    ok "$label -> $found ($(command -v "$found"))"
-  else
-    miss_req "$label (any of: $*)"
-  fi
-}
-
 print_hints() {
   local pm="$1"
   printf "\nInstall hints (%s):\n" "$pm"
   case "$pm" in
     brew)
-      cat <<'EOF'
-  brew install stylua luacheck php-code-sniffer php-cs-fixer go rust
-  npm install -g @fsouza/prettierd prettier eslint_d
-  go install golang.org/x/tools/cmd/goimports@latest
-  go install mvdan.cc/gofumpt@latest
-  composer global require --dev laravel/pint
-EOF
+      cat <<'EOB'
+  brew install neovim git tmux ripgrep fd fzf node php go rust
+  # Neovim formatter/linter tools are managed by Mason (and project-local binaries).
+EOB
       ;;
     pacman)
-      cat <<'EOF'
-  sudo pacman -S --needed stylua luacheck php php-codesniffer php-cs-fixer go rustup
+      cat <<'EOP'
+  sudo pacman -S --needed neovim git tmux ripgrep fd fzf nodejs npm php go rustup
   rustup default stable && rustup component add rustfmt
-  npm install -g @fsouza/prettierd prettier eslint_d
-  go install golang.org/x/tools/cmd/goimports@latest
-  go install mvdan.cc/gofumpt@latest
-  composer global require --dev laravel/pint
-EOF
+  # Neovim formatter/linter tools are managed by Mason (and project-local binaries).
+EOP
       ;;
     apt)
-      cat <<'EOF'
-  sudo apt install -y php php-cli composer golang rustc cargo stylua luacheck php-codesniffer php-cs-fixer rustfmt
-  npm install -g @fsouza/prettierd prettier eslint_d
-  go install golang.org/x/tools/cmd/goimports@latest
-  go install mvdan.cc/gofumpt@latest
-  composer global require --dev laravel/pint
-EOF
+      cat <<'EOA'
+  sudo apt install -y neovim git tmux ripgrep fd-find fzf nodejs npm php php-cli composer golang rustc cargo rustfmt
+  # Neovim formatter/linter tools are managed by Mason (and project-local binaries).
+EOA
       ;;
     *)
-      cat <<'EOF'
+      cat <<'EOU'
   Install required commands manually, then re-run this script.
-EOF
+EOU
       ;;
   esac
 }
@@ -128,15 +100,17 @@ main() {
   check_required_cmd php
   check_required_cmd go
 
-  printf "\nNeovim formatters/linters:\n"
-  check_required_cmd stylua
-  check_required_cmd luacheck
-  check_required_cmd phpcs
-  check_one_required "php formatter" pint php-cs-fixer
-  check_one_required "js formatter" prettierd prettier
-  check_required_cmd eslint_d
-  check_required_cmd goimports
-  check_required_cmd gofumpt
+  printf "\nNeovim formatters/linters (host fallback, optional):\n"
+  check_optional_cmd stylua
+  check_optional_cmd luacheck
+  check_optional_cmd phpcs
+  check_optional_cmd pint
+  check_optional_cmd php-cs-fixer
+  check_optional_cmd prettierd
+  check_optional_cmd prettier
+  check_optional_cmd eslint_d
+  check_optional_cmd goimports
+  check_optional_cmd gofumpt
   check_optional_cmd rustfmt
 
   printf "\nDAP (PHP):\n"

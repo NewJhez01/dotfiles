@@ -130,26 +130,18 @@ install_tools_apt() {
 
 install_nvim_dev_tools() {
   local pm="$1"
-  info "Installing Neovim formatter/linter toolchain..."
+  info "Installing language runtimes for Neovim tooling..."
 
   case "$pm" in
     brew)
       brew install \
-        stylua \
-        luacheck \
-        php-code-sniffer \
-        php-cs-fixer \
+        php \
         go \
         rust || true
       ;;
     pacman)
       local pac_pkgs=(
-        stylua
-        luacheck
-        lua-check
         php
-        php-codesniffer
-        php-cs-fixer
         go
         rustup
       )
@@ -168,34 +160,9 @@ install_nvim_dev_tools() {
     apt)
       sudo apt install -y \
         php php-cli composer \
-        golang rustc cargo \
-        stylua luacheck php-codesniffer php-cs-fixer rustfmt || true
-      sudo apt install -y lua-check || true
+        golang rustc cargo rustfmt || true
       ;;
   esac
-
-  if have npm; then
-    if [[ "$(npm config get prefix 2>/dev/null || true)" == "/usr" ]]; then
-      sudo npm install -g @fsouza/prettierd prettier eslint_d || warn "npm global install failed (sudo)."
-    else
-      npm install -g @fsouza/prettierd prettier eslint_d || sudo npm install -g @fsouza/prettierd prettier eslint_d || warn "npm global install failed."
-    fi
-  else
-    warn "npm not found; skipping @fsouza/prettierd/prettier/eslint_d install."
-  fi
-
-  if have go; then
-    go install golang.org/x/tools/cmd/goimports@latest || warn "go install failed: goimports"
-    go install mvdan.cc/gofumpt@latest || warn "go install failed: gofumpt"
-  else
-    warn "go not found; skipping goimports/gofumpt install."
-  fi
-
-  if have composer; then
-    composer global require --dev laravel/pint || true
-  else
-    warn "composer not found; skipping laravel/pint install."
-  fi
 }
 
 ensure_fzf_tab_plugin() {
