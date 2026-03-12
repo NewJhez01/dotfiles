@@ -467,19 +467,31 @@ configure_git_defaults() {
 
 ensure_tmux_conf() {
   local file="$HOME/.tmux.conf"
+  local tmux_shell="/bin/sh"
 
   if [[ "$OVERWRITE_TMUX" != "1" ]]; then
     info "Skipping tmux overwrite (OVERWRITE_TMUX=0)."
     return
   fi
 
+  if have zsh; then
+    tmux_shell="$(command -v zsh)"
+  elif [[ -n "${SHELL:-}" ]] && [[ -x "${SHELL}" ]]; then
+    tmux_shell="${SHELL}"
+  fi
+
   backup_once "$file"
   info "Writing tmux config (overwriting ~/.tmux.conf)..."
 
-  cat >"$file" <<'EOF'
+  cat >"$file" <<EOF
 # -------------------------
 # Tmux config
 # -------------------------
+
+# Use the real shell path instead of inheriting a stale SHELL env from the
+# terminal session that started the tmux server.
+set -g default-shell ${tmux_shell}
+set -g default-command ${tmux_shell}
 
 # Prefix
 unbind C-b
@@ -548,6 +560,7 @@ ensure_kitty_conf() {
   local dir="${XDG_CONFIG_HOME:-$HOME/.config}/kitty"
   local file="$dir/kitty.conf"
   local opacity="0.88"
+  local kitty_shell=""
 
   if [[ "$OVERWRITE_KITTY" != "1" ]]; then
     info "Skipping kitty config overwrite (OVERWRITE_KITTY=0)."
@@ -557,6 +570,10 @@ ensure_kitty_conf() {
   if is_wsl; then
     # WSLg is not a full compositor environment, so keep this opaque.
     opacity="1.0"
+  fi
+
+  if have zsh; then
+    kitty_shell="$(command -v zsh)"
   fi
 
   mkdir -p "$dir"
@@ -593,12 +610,37 @@ font_family JetBrainsMono Nerd Font
 window_padding_width 10
 
 shell_integration enabled
+${kitty_shell:+shell ${kitty_shell}}
 
 macos_option_as_alt yes
 macos_thicken_font 0.15
 EOF
 
   info "Wrote $file"
+}
+
+explain_kitty_linux_transparency() {
+  if ! is_linux || is_wsl; then
+    return
+  fi
+
+  info "Kitty note: restart kitty itself after bootstrap; 'exec zsh' only reloads the shell."
+
+  case "${XDG_SESSION_TYPE:-unknown}" in
+    x11)
+      if pgrep -x picom >/dev/null 2>&1; then
+        info "Kitty transparency check: X11 compositor detected (picom)."
+      else
+        warn "Kitty transparency check: X11 session with no running picom detected; opacity may stay opaque without a compositor."
+      fi
+      ;;
+    wayland)
+      info "Kitty transparency check: Wayland session detected; opacity depends on compositor/Desktop Environment support."
+      ;;
+    *)
+      warn "Kitty transparency check: unknown session type; if opacity does not apply, verify your compositor/Desktop Environment supports transparent terminal windows."
+      ;;
+  esac
 }
 
 ensure_wezterm_windows_conf() {
@@ -693,6 +735,7 @@ main() {
   set_default_shell_zsh
   ensure_tmux_conf
   ensure_kitty_conf
+  explain_kitty_linux_transparency
   ensure_wezterm_windows_conf
   clone_nvim_config
   configure_git_defaults
@@ -704,7 +747,7 @@ main() {
 
   info "Done."
   info "Open a NEW terminal window (so zsh loads), then run: nvim"
-  info "Test kitty: launch 'kitty' and confirm opacity/background look matches your platform"
+  info "Test kitty: launch a NEW kitty window and confirm opacity/background look matches your platform"
   info "Test wezterm on Windows: launch 'wezterm' and confirm Acrylic/transparency and WSL startup"
   info "Test fzf-tab: type 'cd ' then press Tab"
   info "Test zoxide: z <foldername>"
