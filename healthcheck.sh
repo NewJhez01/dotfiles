@@ -54,20 +54,20 @@ print_hints() {
   case "$pm" in
     brew)
       cat <<'EOB'
-  brew install neovim git tmux ripgrep fd fzf node php go rust
+  brew install neovim git tmux kitty ripgrep fd fzf node php go rust
   # Neovim formatter/linter tools are managed by Mason (and project-local binaries).
 EOB
       ;;
     pacman)
       cat <<'EOP'
-  sudo pacman -S --needed neovim git tmux ripgrep fd fzf nodejs npm php go rustup
+  sudo pacman -S --needed neovim git tmux kitty ripgrep fd fzf nodejs npm php go rustup
   rustup default stable && rustup component add rustfmt
   # Neovim formatter/linter tools are managed by Mason (and project-local binaries).
 EOP
       ;;
     apt)
       cat <<'EOA'
-  sudo apt install -y neovim git tmux ripgrep fd-find fzf nodejs npm php php-cli composer golang rustc cargo rustfmt
+  sudo apt install -y neovim git tmux kitty ripgrep fd-find fzf nodejs npm php php-cli composer golang rustc cargo rustfmt
   # Neovim formatter/linter tools are managed by Mason (and project-local binaries).
 EOA
       ;;
@@ -90,6 +90,7 @@ main() {
   check_required_cmd nvim
   check_required_cmd git
   check_required_cmd tmux
+  check_required_cmd kitty
   check_required_cmd rg
   check_required_cmd fd
   check_required_cmd fzf

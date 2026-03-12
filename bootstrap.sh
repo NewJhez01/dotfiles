@@ -17,6 +17,7 @@ INSTALL_NODE="${INSTALL_NODE:-1}"          # 1=install node, 0=skip
 SET_DEFAULT_SHELL_ZSH="${SET_DEFAULT_SHELL_ZSH:-1}"  # 1=chsh to zsh, 0=skip
 OVERWRITE_ZSHRC="${OVERWRITE_ZSHRC:-1}"    # 1=overwrite ~/.zshrc (backup first)
 OVERWRITE_TMUX="${OVERWRITE_TMUX:-1}"      # 1=overwrite ~/.tmux.conf (backup first)
+OVERWRITE_KITTY="${OVERWRITE_KITTY:-1}"    # 1=overwrite kitty.conf (backup first)
 
 # =========================
 # HELPERS
@@ -83,7 +84,7 @@ install_tools_brew() {
   info "Installing tools via brew..."
   brew update
   local pkgs=(
-    neovim git tmux starship ripgrep fd fzf bat jq tree htop direnv git-delta lazygit eza zoxide
+    neovim git tmux kitty starship ripgrep fd fzf bat jq tree htop direnv git-delta lazygit eza zoxide
   )
   if [[ "$INSTALL_NODE" == "1" ]]; then
     pkgs+=(node)
@@ -101,7 +102,7 @@ install_tools_pacman() {
   sudo pacman -Syu --needed --noconfirm
 
   local pkgs=(
-    neovim git tmux starship ripgrep fd fzf bat jq tree htop direnv git-delta lazygit eza zoxide
+    neovim git tmux kitty starship ripgrep fd fzf bat jq tree htop direnv git-delta lazygit eza zoxide
     unzip zip pkgconf base-devel
     zsh
   )
@@ -119,7 +120,7 @@ install_tools_apt() {
   sudo apt update
   sudo apt install -y \
     build-essential curl git ca-certificates gnupg lsb-release unzip zip pkg-config \
-    tmux ripgrep jq tree htop direnv zsh
+    tmux kitty ripgrep jq tree htop direnv zsh
 
   # Ubuntu naming differences
   sudo apt install -y neovim fzf bat fd-find || true
@@ -498,6 +499,61 @@ EOF
   info "Wrote $file"
 }
 
+ensure_kitty_conf() {
+  local dir="${XDG_CONFIG_HOME:-$HOME/.config}/kitty"
+  local file="$dir/kitty.conf"
+  local opacity="0.88"
+
+  if [[ "$OVERWRITE_KITTY" != "1" ]]; then
+    info "Skipping kitty config overwrite (OVERWRITE_KITTY=0)."
+    return
+  fi
+
+  if is_wsl; then
+    # WSLg is not a full compositor environment, so keep this opaque.
+    opacity="1.0"
+  fi
+
+  mkdir -p "$dir"
+  backup_once "$file"
+  info "Writing kitty config (overwriting $file)..."
+
+  cat >"$file" <<EOF
+# ==========================================
+# Owen kitty.conf (bootstrap-managed)
+# ==========================================
+
+font_size 13.0
+
+cursor_shape beam
+cursor_blink_interval 0
+
+scrollback_lines 10000
+
+tab_bar_edge top
+tab_bar_style powerline
+tab_powerline_style slanted
+
+# Match the transparent compositor-style look where the platform supports it.
+background_opacity ${opacity}
+dynamic_background_opacity yes
+
+background #111417
+foreground #e6e6e6
+selection_background #3a4a5a
+selection_foreground #ffffff
+
+window_padding_width 10
+
+shell_integration enabled
+
+macos_option_as_alt yes
+macos_thicken_font 0.15
+EOF
+
+  info "Wrote $file"
+}
+
 # =========================
 # MAIN
 # =========================
@@ -527,6 +583,7 @@ main() {
   write_zshrc
   set_default_shell_zsh
   ensure_tmux_conf
+  ensure_kitty_conf
   clone_nvim_config
   configure_git_defaults
 
@@ -537,6 +594,7 @@ main() {
 
   info "Done."
   info "Open a NEW terminal window (so zsh loads), then run: nvim"
+  info "Test kitty: launch 'kitty' and confirm opacity/background look matches your platform"
   info "Test fzf-tab: type 'cd ' then press Tab"
   info "Test zoxide: z <foldername>"
   info "Test tmux copy-mode scroll: Ctrl-Space [ then k/j, /search, q"
