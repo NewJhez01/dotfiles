@@ -97,6 +97,39 @@ install_tools_brew() {
   fi
 }
 
+install_jetbrains_mono_nerd_font() {
+  local pm="$1"
+
+  info "Installing JetBrainsMono Nerd Font..."
+
+  case "$pm" in
+    brew)
+      brew tap homebrew/cask-fonts
+      brew install --cask font-jetbrains-mono-nerd-font
+      ;;
+    pacman)
+      if pacman -Si ttf-jetbrains-mono-nerd >/dev/null 2>&1; then
+        sudo pacman -S --needed --noconfirm ttf-jetbrains-mono-nerd
+      else
+        warn "Skipping JetBrainsMono Nerd Font; pacman package not available."
+      fi
+      ;;
+    apt)
+      local font_dir="${XDG_DATA_HOME:-$HOME/.local/share}/fonts/JetBrainsMonoNerdFont"
+      local tmp_zip="/tmp/JetBrainsMono.zip"
+
+      mkdir -p "$font_dir"
+      curl -fL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip" -o "$tmp_zip"
+      unzip -o "$tmp_zip" -d "$font_dir" >/dev/null
+      rm -f "$tmp_zip"
+
+      if have fc-cache; then
+        fc-cache -f "$font_dir" >/dev/null 2>&1 || true
+      fi
+      ;;
+  esac
+}
+
 install_tools_pacman() {
   info "Installing tools via pacman (Arch/Omarchy)..."
   sudo pacman -Syu --needed --noconfirm
@@ -543,6 +576,8 @@ foreground #e6e6e6
 selection_background #3a4a5a
 selection_foreground #ffffff
 
+font_family JetBrainsMono Nerd Font
+
 window_padding_width 10
 
 shell_integration enabled
@@ -575,6 +610,7 @@ main() {
       ;;
   esac
 
+  install_jetbrains_mono_nerd_font "$pm"
   install_nvim_dev_tools "$pm"
   ensure_fzf_tab_plugin
   ensure_zsh_autosuggestions_plugin
