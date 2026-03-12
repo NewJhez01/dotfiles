@@ -17,6 +17,8 @@ INSTALL_NODE="${INSTALL_NODE:-1}"          # 1=install node, 0=skip
 SET_DEFAULT_SHELL_ZSH="${SET_DEFAULT_SHELL_ZSH:-1}"  # 1=chsh to zsh, 0=skip
 OVERWRITE_ZSHRC="${OVERWRITE_ZSHRC:-1}"    # 1=overwrite ~/.zshrc (backup first)
 OVERWRITE_TMUX="${OVERWRITE_TMUX:-1}"      # 1=overwrite ~/.tmux.conf (backup first)
+OVERWRITE_KITTY="${OVERWRITE_KITTY:-1}"    # 1=overwrite kitty.conf (backup first)
+OVERWRITE_WEZTERM_WINDOWS="${OVERWRITE_WEZTERM_WINDOWS:-1}"  # 1=overwrite Windows .wezterm.lua from WSL
 
 # =========================
 # HELPERS
@@ -29,6 +31,17 @@ have() { command -v "$1" >/dev/null 2>&1; }
 is_macos() { [[ "$(uname -s)" == "Darwin" ]]; }
 is_linux() { [[ "$(uname -s)" == "Linux" ]]; }
 is_wsl()   { is_linux && grep -qiE "(microsoft|wsl)" /proc/version 2>/dev/null; }
+windows_home_dir() {
+  local win_profile
+
+  have cmd.exe || return 1
+  have wslpath || return 1
+
+  win_profile="$(cmd.exe /C "echo %USERPROFILE%" 2>/dev/null | tr -d '\r')"
+  [[ -n "$win_profile" ]] || return 1
+
+  wslpath "$win_profile"
+}
 
 backup_once() {
   local path="$1"
@@ -83,7 +96,7 @@ install_tools_brew() {
   info "Installing tools via brew..."
   brew update
   local pkgs=(
-    neovim git tmux starship ripgrep fd fzf bat jq tree htop direnv git-delta lazygit eza zoxide
+    neovim git tmux kitty starship ripgrep fd fzf bat jq tree htop direnv git-delta lazygit eza zoxide
   )
   if [[ "$INSTALL_NODE" == "1" ]]; then
     pkgs+=(node)
@@ -96,12 +109,45 @@ install_tools_brew() {
   fi
 }
 
+install_jetbrains_mono_nerd_font() {
+  local pm="$1"
+
+  info "Installing JetBrainsMono Nerd Font..."
+
+  case "$pm" in
+    brew)
+      brew tap homebrew/cask-fonts
+      brew install --cask font-jetbrains-mono-nerd-font
+      ;;
+    pacman)
+      if pacman -Si ttf-jetbrains-mono-nerd >/dev/null 2>&1; then
+        sudo pacman -S --needed --noconfirm ttf-jetbrains-mono-nerd
+      else
+        warn "Skipping JetBrainsMono Nerd Font; pacman package not available."
+      fi
+      ;;
+    apt)
+      local font_dir="${XDG_DATA_HOME:-$HOME/.local/share}/fonts/JetBrainsMonoNerdFont"
+      local tmp_zip="/tmp/JetBrainsMono.zip"
+
+      mkdir -p "$font_dir"
+      curl -fL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip" -o "$tmp_zip"
+      unzip -o "$tmp_zip" -d "$font_dir" >/dev/null
+      rm -f "$tmp_zip"
+
+      if have fc-cache; then
+        fc-cache -f "$font_dir" >/dev/null 2>&1 || true
+      fi
+      ;;
+  esac
+}
+
 install_tools_pacman() {
   info "Installing tools via pacman (Arch/Omarchy)..."
   sudo pacman -Syu --needed --noconfirm
 
   local pkgs=(
-    neovim git tmux starship ripgrep fd fzf bat jq tree htop direnv git-delta lazygit eza zoxide
+    neovim git tmux kitty starship ripgrep fd fzf bat jq tree htop direnv git-delta lazygit eza zoxide
     unzip zip pkgconf base-devel
     zsh
   )
@@ -119,7 +165,7 @@ install_tools_apt() {
   sudo apt update
   sudo apt install -y \
     build-essential curl git ca-certificates gnupg lsb-release unzip zip pkg-config \
-    tmux ripgrep jq tree htop direnv zsh
+    tmux kitty ripgrep jq tree htop direnv zsh
 
   # Ubuntu naming differences
   sudo apt install -y neovim fzf bat fd-find || true
@@ -498,6 +544,124 @@ EOF
   info "Wrote $file"
 }
 
+ensure_kitty_conf() {
+  local dir="${XDG_CONFIG_HOME:-$HOME/.config}/kitty"
+  local file="$dir/kitty.conf"
+  local opacity="0.88"
+
+  if [[ "$OVERWRITE_KITTY" != "1" ]]; then
+    info "Skipping kitty config overwrite (OVERWRITE_KITTY=0)."
+    return
+  fi
+
+  if is_wsl; then
+    # WSLg is not a full compositor environment, so keep this opaque.
+    opacity="1.0"
+  fi
+
+  mkdir -p "$dir"
+  backup_once "$file"
+  info "Writing kitty config (overwriting $file)..."
+
+  cat >"$file" <<EOF
+# ==========================================
+# Owen kitty.conf (bootstrap-managed)
+# ==========================================
+
+font_size 13.0
+
+cursor_shape beam
+cursor_blink_interval 0
+
+scrollback_lines 10000
+
+tab_bar_edge top
+tab_bar_style powerline
+tab_powerline_style slanted
+
+# Match the transparent compositor-style look where the platform supports it.
+background_opacity ${opacity}
+dynamic_background_opacity yes
+
+background #111417
+foreground #e6e6e6
+selection_background #3a4a5a
+selection_foreground #ffffff
+
+font_family JetBrainsMono Nerd Font
+
+window_padding_width 10
+
+shell_integration enabled
+
+macos_option_as_alt yes
+macos_thicken_font 0.15
+EOF
+
+  info "Wrote $file"
+}
+
+ensure_wezterm_windows_conf() {
+  local win_home file
+
+  if ! is_wsl; then
+    return
+  fi
+
+  if [[ "$OVERWRITE_WEZTERM_WINDOWS" != "1" ]]; then
+    info "Skipping Windows wezterm config overwrite (OVERWRITE_WEZTERM_WINDOWS=0)."
+    return
+  fi
+
+  if ! win_home="$(windows_home_dir)"; then
+    warn "Could not resolve Windows home directory from WSL; skipping wezterm config."
+    return
+  fi
+
+  file="$win_home/.wezterm.lua"
+  mkdir -p "$win_home"
+  backup_once "$file"
+  info "Writing Windows wezterm config (overwriting $file)..."
+
+  cat >"$file" <<'EOF'
+local wezterm = require 'wezterm'
+
+local config = {}
+
+config.default_prog = { 'wsl.exe', '--cd', '~' }
+config.font = wezterm.font('JetBrainsMono Nerd Font')
+config.font_size = 13.0
+
+config.window_background_opacity = 0.88
+config.win32_system_backdrop = 'Acrylic'
+config.window_padding = {
+  left = 10,
+  right = 10,
+  top = 10,
+  bottom = 10,
+}
+
+config.colors = {
+  background = '#111417',
+  foreground = '#e6e6e6',
+  selection_bg = '#3a4a5a',
+  selection_fg = '#ffffff',
+  cursor_bg = '#e6e6e6',
+  cursor_fg = '#111417',
+}
+
+config.cursor_blink_rate = 0
+config.default_cursor_style = 'BlinkingBar'
+config.scrollback_lines = 10000
+config.use_fancy_tab_bar = true
+config.hide_tab_bar_if_only_one_tab = false
+
+return config
+EOF
+
+  info "Wrote $file"
+}
+
 # =========================
 # MAIN
 # =========================
@@ -519,6 +683,7 @@ main() {
       ;;
   esac
 
+  install_jetbrains_mono_nerd_font "$pm"
   install_nvim_dev_tools "$pm"
   ensure_fzf_tab_plugin
   ensure_zsh_autosuggestions_plugin
@@ -527,6 +692,8 @@ main() {
   write_zshrc
   set_default_shell_zsh
   ensure_tmux_conf
+  ensure_kitty_conf
+  ensure_wezterm_windows_conf
   clone_nvim_config
   configure_git_defaults
 
@@ -537,6 +704,8 @@ main() {
 
   info "Done."
   info "Open a NEW terminal window (so zsh loads), then run: nvim"
+  info "Test kitty: launch 'kitty' and confirm opacity/background look matches your platform"
+  info "Test wezterm on Windows: launch 'wezterm' and confirm Acrylic/transparency and WSL startup"
   info "Test fzf-tab: type 'cd ' then press Tab"
   info "Test zoxide: z <foldername>"
   info "Test tmux copy-mode scroll: Ctrl-Space [ then k/j, /search, q"
