@@ -116,7 +116,6 @@ install_jetbrains_mono_nerd_font() {
 
   case "$pm" in
     brew)
-      brew tap homebrew/cask-fonts
       brew install --cask font-jetbrains-mono-nerd-font
       ;;
     pacman)
