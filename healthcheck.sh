@@ -79,6 +79,51 @@ EOU
   esac
 }
 
+check_kitty_runtime() {
+  local kitty_conf="${XDG_CONFIG_HOME:-$HOME/.config}/kitty/kitty.conf"
+
+  printf "\nKitty runtime:\n"
+  if [[ -f "$kitty_conf" ]]; then
+    ok "kitty config -> $kitty_conf"
+    if grep -Eq '^background_opacity[[:space:]]+0\.[0-9]+' "$kitty_conf"; then
+      ok "kitty background_opacity configured"
+    else
+      miss_opt "kitty background_opacity not configured in $kitty_conf"
+    fi
+  else
+    miss_opt "kitty config ($kitty_conf)"
+  fi
+
+  local login_shell=""
+  login_shell="$(getent passwd "$USER" 2>/dev/null | cut -d: -f7 || true)"
+  if [[ -n "$login_shell" ]]; then
+    ok "login shell -> $login_shell"
+    if [[ -n "${SHELL:-}" && "${SHELL}" != "$login_shell" ]]; then
+      miss_opt "SHELL env mismatch (${SHELL}); GUI apps may start the wrong shell until the session is restarted"
+    fi
+  fi
+
+  if [[ "$(uname -s)" == "Linux" ]]; then
+    case "${XDG_SESSION_TYPE:-unknown}" in
+      x11)
+        ok "session type -> x11"
+        if pgrep -x picom >/dev/null 2>&1; then
+          ok "x11 compositor -> picom running"
+        else
+          miss_opt "x11 compositor (picom not running; kitty may appear opaque)"
+        fi
+        ;;
+      wayland)
+        ok "session type -> wayland"
+        ok "wayland compositor -> managed by desktop environment/window manager"
+        ;;
+      *)
+        miss_opt "session type (XDG_SESSION_TYPE unset; kitty transparency support unclear)"
+        ;;
+    esac
+  fi
+}
+
 main() {
   local pm
   pm="$(pm_detect)"
@@ -120,6 +165,8 @@ main() {
   else
     miss_opt "php debug adapter script (~/.local/share/nvim/vscode-php-debug/out/phpDebug.js)"
   fi
+
+  check_kitty_runtime
 
   printf "\nSummary:\n"
   printf "  required missing: %s\n" "$missing_required"
