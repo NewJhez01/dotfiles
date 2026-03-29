@@ -173,6 +173,36 @@ install_tools_apt() {
   sudo apt install -y zoxide || true
 }
 
+install_tree_sitter_cli() {
+  local pm="$1"
+
+  if have tree-sitter; then
+    info "tree-sitter-cli already installed."
+    return
+  fi
+
+  info "Installing tree-sitter-cli (required for nvim-treesitter)..."
+
+  case "$pm" in
+    brew)
+      brew install tree-sitter-cli || npm install -g tree-sitter-cli
+      ;;
+    pacman)
+      if pacman -Si tree-sitter-cli >/dev/null 2>&1; then
+        sudo pacman -S --needed --noconfirm tree-sitter-cli
+      else
+        npm install -g tree-sitter-cli
+      fi
+      ;;
+    apt)
+      npm install -g tree-sitter-cli
+      ;;
+    *)
+      npm install -g tree-sitter-cli
+      ;;
+  esac
+}
+
 install_nvim_dev_tools() {
   local pm="$1"
   info "Installing language runtimes for Neovim tooling..."
@@ -182,7 +212,8 @@ install_nvim_dev_tools() {
       brew install \
         php \
         go \
-        rust || true
+        rust \
+        tree-sitter-cli || npm install -g tree-sitter-cli
       ;;
     pacman)
       local pac_pkgs=(
@@ -208,6 +239,8 @@ install_nvim_dev_tools() {
         golang rustc cargo rustfmt || true
       ;;
   esac
+
+  install_tree_sitter_cli "$pm"
 }
 
 ensure_fzf_tab_plugin() {
