@@ -308,6 +308,15 @@ export PATH="$HOME/go/bin:$PATH"
 export PATH="$HOME/.config/composer/vendor/bin:$PATH"
 export PATH="$HOME/.composer/vendor/bin:$PATH"
 
+# Homebrew (macOS only)
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  if [[ -x /opt/homebrew/bin/brew ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [[ -x /usr/local/bin/brew ]]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+  fi
+fi
+
 # Completion
 autoload -Uz compinit
 mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
@@ -494,6 +503,7 @@ configure_git_defaults() {
   git config --global core.editor "nvim" || true
   git config --global pull.rebase false || true
   git config --global init.defaultBranch main || true
+  git config --global push.autoSetupRemote true || true
   info "Configured basic global git defaults."
 }
 
